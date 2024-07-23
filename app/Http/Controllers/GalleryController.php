@@ -17,25 +17,18 @@ class GalleryController extends Controller
 
     public function upload(Request $request) {
 
-        $request->validate([
-            'title' => 'required|string|max:255|min:6',
-            'image' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
-            Rule::dimensions()->maxWidth(800)->maxHeight(800)
-        ]);
+        $this->validateRequest($request);
 
         $tile = $request->only('title');
         $image = $request->file('image');
-        $imageName = $image->hashName();
-        $hash = $image->storePublicly('uploads', 'public', $imageName);
-        $url = asset('storage/'.$hash);
 
         try {
-            Image::create([
-                'title' => $tile['title'],
-                'url'   => $url,
-            ]);
+            $url = $this->storeImageInDisk($image);
+            $databaseImage = $this->storageImageInDatabase($tile['title'], $url);
         } catch (Exception $e) {
-            Storage::disk('public')->delete($hash);
+            $this->deleteDatabaseImage($databaseImage);
+            $this->deleteImageFromDisk($url);
+            
             return redirect()->back()->withErrors(['error' => 'erro ao salvar a imagem, tente novamente!']);
         }
 
@@ -55,5 +48,36 @@ class GalleryController extends Controller
         $image->delete();
 
         return redirect()->route('index');
+    }
+    
+    private function validateRequest(Request $request) {
+        $request->validate([
+            'title' => 'required|string|max:255|min:6',
+            'image' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+            Rule::dimensions()->maxWidth(800)->maxHeight(800)
+        ]);
+    }
+
+    private function storeImageInDisk($image) {
+        $imageName = $image->storePublicly('uploads', 'public');
+        return asset('storage/'.$imageName);
+    }
+
+    private function storageImageInDatabase($tile, $url) {
+        return Image::create([
+            'title' => $tile,
+            'url'   => $url,
+        ]);
+    }
+
+    private function deleteImageFromDisk($imageUrl) {
+        $imagePath = str_replace(asset('storage/'), '', $imageUrl);
+        Storage::disk('public')->delete($imagePath);
+    }
+
+    private function deleteDatabaseImage($databaseImage) {
+        if ($databaseImage) {
+            $databaseImage->delete();
+        }
     }
 }
