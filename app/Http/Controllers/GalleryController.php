@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Image;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class GalleryController extends Controller
 {
@@ -32,7 +33,18 @@ class GalleryController extends Controller
         return redirect()->route('index');
     }
 
-    public function delete() {
+    public function delete($id) {
+        $image = Image::findOrFail($id);
+        $url = parse_url($image->url);
+        $path = ltrim($url['path'], '/storage\/');
 
+        if (!Storage::disk('public')->exists($path)) {
+            return false;
+        }
+
+        Storage::disk('public')->delete($path);
+        $image->delete();
+
+        return redirect()->route('index');
     }
 }
