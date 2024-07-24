@@ -33,9 +33,9 @@ class GalleryController extends Controller
         $image = $request->file('image');
 
         try {
-            $databaseImage = $this->imageService->storeNewImage($image, $tile['title']);
+            $this->imageService->storeNewImage($image, $tile['title']);
         } catch (Exception $e) {
-            $this->imageService->rollback($databaseImage);
+            $this->imageService->rollback();
             
             return redirect()->back()->withErrors(['error' => 'erro ao salvar a imagem, tente novamente!']);
         }
