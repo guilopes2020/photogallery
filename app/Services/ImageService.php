@@ -10,6 +10,8 @@ use Exception;
 
 class ImageService implements ImageServiceInterface
 {
+    private $rollbackQueue = null;
+
     public function storeNewImage($image, $title): Image
     {
         try {
@@ -17,15 +19,15 @@ class ImageService implements ImageServiceInterface
             return $this->storageImageInDatabase($title, $url);
         } catch (Exception $e) {
             throw new Error('Erro ao gravar a imagem, tente novamente!');
-            return false;
         }
         
     }
 
-    public function deleteImageFromDisk($imageUrl): void
+    public function deleteImageFromDisk($imageUrl): bool
     {
         $imagePath = str_replace(asset('storage/'), '', $imageUrl);
         Storage::disk('public')->delete($imagePath);
+        return true;
     }
 
     public function deleteDatabaseImage($databaseImage): bool
@@ -38,23 +40,44 @@ class ImageService implements ImageServiceInterface
         return true;
     }
 
-    public function rollback($databaseImage)
+    public function rollback()
     {
-        $this->deleteDatabaseImage($databaseImage);
-        $this->deleteImageFromDisk($databaseImage->url);
+        if (!empty($this->rollbackQueue)) {
+            foreach($this->rollbackQueue as $interaction) {
+                $method = $interaction['method'];
+                $params = $interaction['params'];
+                if (method_exists($this, $method)) {
+                    call_user_func_array([$this,$method], $params);
+                }
+            }
+        }
     }
 
     private function storeImageInDisk($image): string
     {
         $imageName = $image->storePublicly('uploads', 'public');
-        return asset('storage/'.$imageName);
+        $url = asset('storage/'.$imageName);
+        $this->addToRollbackQueue('deleteImageFromDisk', [$url]);
+        return $url;
     }
 
     private function storageImageInDatabase($tile, $url): Image
     {
-        return Image::create([
+        $image =  Image::create([
             'title' => $tile,
-            'url'   => $url,
+            'url'   => $url
         ]);
+
+        $this->addToRollbackQueue('deleteDatabaseImage', [$image]);
+
+        return $image;
+    }
+
+    private function addToRollbackQueue($method, $params = [])
+    {
+        $this->rollbackQueue[] = [
+            'methhod' => $method,
+            'params'  => $params
+        ];
     }
 }
