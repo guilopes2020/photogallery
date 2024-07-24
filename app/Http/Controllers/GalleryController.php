@@ -2,20 +2,30 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Image;
 use Exception;
+use App\Models\Image;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
+use App\Services\ImageService;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Storage;
 
 class GalleryController extends Controller
 {
-    public function index() {
+    protected $imageService;
+
+    public function __construct(ImageService $imageService)
+    {
+        $this->imageService = $imageService;
+    }
+
+    public function index()
+    {
         $images = Image::all();
         return view('index', ['images' => $images]);
     }
 
-    public function upload(Request $request) {
+    public function upload(Request $request)
+    {
 
         $this->validateRequest($request);
 
@@ -23,11 +33,9 @@ class GalleryController extends Controller
         $image = $request->file('image');
 
         try {
-            $url = $this->storeImageInDisk($image);
-            $databaseImage = $this->storageImageInDatabase($tile['title'], $url);
+            $databaseImage = $this->imageService->storeNewImage($image, $tile['title']);
         } catch (Exception $e) {
-            $this->deleteDatabaseImage($databaseImage);
-            $this->deleteImageFromDisk($url);
+            $this->imageService->rollback($databaseImage);
             
             return redirect()->back()->withErrors(['error' => 'erro ao salvar a imagem, tente novamente!']);
         }
@@ -35,7 +43,8 @@ class GalleryController extends Controller
         return redirect()->route('index');
     }
 
-    public function delete($id) {
+    public function delete($id)
+    {
         $image = Image::findOrFail($id);
         $url = parse_url($image->url);
         $path = ltrim($url['path'], '/storage\/');
@@ -50,7 +59,8 @@ class GalleryController extends Controller
         return redirect()->route('index');
     }
     
-    private function validateRequest(Request $request) {
+    private function validateRequest(Request $request)
+    {
         $request->validate([
             'title' => 'required|string|max:255|min:6',
             'image' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
@@ -58,26 +68,4 @@ class GalleryController extends Controller
         ]);
     }
 
-    private function storeImageInDisk($image) {
-        $imageName = $image->storePublicly('uploads', 'public');
-        return asset('storage/'.$imageName);
-    }
-
-    private function storageImageInDatabase($tile, $url) {
-        return Image::create([
-            'title' => $tile,
-            'url'   => $url,
-        ]);
-    }
-
-    private function deleteImageFromDisk($imageUrl) {
-        $imagePath = str_replace(asset('storage/'), '', $imageUrl);
-        Storage::disk('public')->delete($imagePath);
-    }
-
-    private function deleteDatabaseImage($databaseImage) {
-        if ($databaseImage) {
-            $databaseImage->delete();
-        }
-    }
 }
