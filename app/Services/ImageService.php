@@ -10,7 +10,7 @@ use Exception;
 
 class ImageService implements ImageServiceInterface
 {
-    private $rollbackQueue = null;
+    private $rollbackStack = null;
 
     public function storeNewImage($image, $title): Image
     {
@@ -42,13 +42,12 @@ class ImageService implements ImageServiceInterface
 
     public function rollback()
     {
-        if (!empty($this->rollbackQueue)) {
-            foreach($this->rollbackQueue as $interaction) {
-                $method = $interaction['method'];
-                $params = $interaction['params'];
-                if (method_exists($this, $method)) {
-                    call_user_func_array([$this,$method], $params);
-                }
+        while (!empty($this->rollbackStack)) {
+            $rolbackAction = array_pop($this->rollbackStack);
+            $method = $rolbackAction['method'];
+            $params = $rolbackAction['params'];
+            if (method_exists($this, $method)) {
+                call_user_func_array([$this, $method], $params);
             }
         }
     }
@@ -75,7 +74,7 @@ class ImageService implements ImageServiceInterface
 
     private function addToRollbackQueue($method, $params = [])
     {
-        $this->rollbackQueue[] = [
+        $this->rollbackStack[] = [
             'methhod' => $method,
             'params'  => $params
         ];
